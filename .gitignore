@@ -1,0 +1,20 @@
+cat > .gitignore << 'EOF'
+# 모델 파일 (용량 큼)
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# 환경변수
+.env
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+EOF

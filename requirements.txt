@@ -4,3 +4,5 @@ torch
 numpy
 datasets
 python-dotenv
+tokenizers
+transformers

@@ -1,7 +1,7 @@
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.pre_tokenizers import ByteLevel  # Whitespace → ByteLevel
 from tokenizers.processors import TemplateProcessing
 
 class KoreanTokenizer:
@@ -14,11 +14,8 @@ class KoreanTokenizer:
         self.tokenizer = None
 
     def train(self, files: list[str], vocab_size: int = 10000):
-        """
-        files: 학습할 텍스트 파일 경로 리스트
-        """
         self.tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
-        self.tokenizer.pre_tokenizer = Whitespace()
+        self.tokenizer.pre_tokenizer = ByteLevel()  # 변경
 
         trainer = BpeTrainer(
             vocab_size=vocab_size,
@@ -26,7 +23,6 @@ class KoreanTokenizer:
         )
         self.tokenizer.train(files, trainer)
 
-        # 자동으로 BOS, EOS 붙이기
         self.tokenizer.post_processor = TemplateProcessing(
             single="[BOS] $A [EOS]",
             special_tokens=[
@@ -39,7 +35,6 @@ class KoreanTokenizer:
         return self.tokenizer.encode(text).ids
 
     def decode(self, ids: list[int]) -> str:
-        # BOS, EOS, PAD 제거 후 디코딩
         filtered = [i for i in ids if i not in [self.PAD_ID, self.BOS_ID, self.EOS_ID]]
         return self.tokenizer.decode(filtered)
 

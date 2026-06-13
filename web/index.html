@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>한국어 챗봇</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- 사이드바 -->
+    <aside class="sidebar">
+      <button class="new-chat-btn" onclick="newChat()">
+        <span>+</span> 새 대화
+      </button>
+      <div class="history-label">최근 대화</div>
+      <div class="history-list" id="historyList"></div>
+    </aside>
+
+    <!-- 메인 채팅 영역 -->
+    <main class="chat-main">
+      <div class="chat-messages" id="chatMessages">
+        <div class="welcome">
+          <h2>한국어 챗봇</h2>
+          <p>무엇이든 질문해보세요!</p>
+        </div>
+      </div>
+
+      <!-- 입력창 -->
+      <div class="input-area">
+        <div class="input-box">
+          <textarea
+            id="userInput"
+            placeholder="메시지를 입력하세요..."
+            rows="1"
+            onkeydown="handleKeyDown(event)"
+            oninput="autoResize(this)"
+          ></textarea>
+          <button class="send-btn" onclick="sendMessage()" id="sendBtn">
+            &#9650;
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="chat.js"></script>
+</body>
+</html>

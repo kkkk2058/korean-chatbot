@@ -1,52 +1,39 @@
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import ByteLevel  # Whitespace → ByteLevel
-from tokenizers.processors import TemplateProcessing
+from tokenizers.pre_tokenizers import ByteLevel
+from tokenizers.decoders import ByteLevel as ByteLevelDecoder
 
-class KoreanTokenizer:
-    PAD_ID = 0
-    BOS_ID = 1
-    EOS_ID = 2
-    UNK_ID = 3
-
+class BPETokenizer:
     def __init__(self):
         self.tokenizer = None
 
-    def train(self, files: list[str], vocab_size: int = 10000):
+    def train(self, paths: list[str], vocab_size: int):
         self.tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
-        self.tokenizer.pre_tokenizer = ByteLevel()  # 변경
-
+        self.tokenizer.pre_tokenizer = ByteLevel()
+        self.tokenizer.decoder = ByteLevelDecoder()
         trainer = BpeTrainer(
             vocab_size=vocab_size,
-            special_tokens=["[PAD]", "[BOS]", "[EOS]", "[UNK]"],
+            special_tokens=["[PAD]", "[BOS]", "[EOS]", "[UNK]"]
         )
-        self.tokenizer.train(files, trainer)
-
-        self.tokenizer.post_processor = TemplateProcessing(
-            single="[BOS] $A [EOS]",
-            special_tokens=[
-                ("[BOS]", self.BOS_ID),
-                ("[EOS]", self.EOS_ID),
-            ],
-        )
+        self.tokenizer.train(paths, trainer)  # 파일에서 읽으면서 학습
 
     def encode(self, text: str) -> list[int]:
         return self.tokenizer.encode(text).ids
 
     def decode(self, ids: list[int]) -> str:
-        filtered = [i for i in ids if i not in [self.PAD_ID, self.BOS_ID, self.EOS_ID]]
-        return self.tokenizer.decode(filtered)
+        return self.tokenizer.decode(ids)
 
     def save(self, path: str):
         self.tokenizer.save(path)
 
     def load(self, path: str):
         self.tokenizer = Tokenizer.from_file(path)
+        self.tokenizer.decoder = ByteLevelDecoder()
 
-    @property
-    def vocab_size(self) -> int:
-        return self.tokenizer.get_vocab_size()
+    def tokenize(self, text: str) -> list[str]:
+        # 글자를 숫자 ID가 아니라, 쪼개진 글자 조각(Token) 문자열 형태로 반환
+        return self.tokenizer.encode(text).tokens
 
 # import json
 

@@ -19,6 +19,12 @@ class InferenceEngine:
 
     def generate(self, prompt: str, max_new_tokens: int = 100, temperature: float = 0.8) -> str:
         ids = self.tokenizer_obj.encode(prompt).ids
+        
+        # BOS, EOS 제거
+        ids = [i for i in ids if i not in [1, 2]]
+        # BOS만 앞에 추가
+        ids = [1] + ids
+        
         input_tensor = torch.tensor([ids]).to(self.device)
         
         with torch.no_grad():
@@ -26,16 +32,15 @@ class InferenceEngine:
                 with torch.amp.autocast('cuda'):
                     logits = self.model(input_tensor)
                 
-                # 마지막 토큰의 logits
                 next_logits = logits[0, -1, :] / temperature
                 probs = torch.softmax(next_logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1)
                 
-                # EOS면 종료
                 if next_token.item() == 2:
                     break
                 
                 input_tensor = torch.cat([input_tensor, next_token.unsqueeze(0)], dim=-1)
         
-        generated_ids = input_tensor[0].tolist()
+        # BOS 제외하고 디코딩
+        generated_ids = input_tensor[0].tolist()[1:]
         return self.tokenizer_obj.decode(generated_ids)

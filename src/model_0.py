@@ -5,6 +5,7 @@ import torch.nn as nn
 class Transformer(nn.Module):
     def __init__(self, vocab_size, d_model, n_heads, n_layers, max_seq_len):
         super().__init__()
+        self.d_model = d_model
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.positional = nn.Embedding(max_seq_len, d_model)
 
@@ -21,12 +22,14 @@ class Transformer(nn.Module):
         batch_size, seq_len = x.size()
 
         # 1. 위치 인덱스 만들기
-        positions = torch.arange(0, seq_len, device=x.device)
+        # positions = torch.arange(0, seq_len, device=x.device)
+        positions = torch.arange(0, seq_len, device=x.device).unsqueeze(0).expand(batch_size, seq_len)
         # 2. embedding + positional 더하기
-        x = self.embedding(x) + self.positional(positions)
-
+        # x = self.embedding(x) + self.positional(positions)
+        x = self.embedding(x) * math.sqrt(self.d_model) + self.positional(positions)
+        
         mask = torch.tril(torch.ones((seq_len, seq_len), device=x.device)).bool()
-
+        mask = mask.unsqueeze(0).unsqueeze(1) # 미리 4차원 [1, 1, S, S]로 만들어 둡니다.
         # 3. layers 통과
         for layer in self.layers:
             x = layer(x,mask=mask)
@@ -51,10 +54,11 @@ class DecoderBlock(nn.Module):
 
     def forward(self, x, mask=None):
         # 1. Attention + Add & Norm
-        x = self.norm1(x + self.attention(x, mask))
-
+        # x = self.norm1(x + self.attention(x, mask))
+        x = x + self.attention(self.norm1(x), mask)
         # 2. FeedForward + Add & Norm
-        x = self.norm2(x + self.ff(x))
+        # x = self.norm2(x + self.ff(x))
+        x = x + self.ff(self.norm2(x))
 
         return x
 
@@ -85,10 +89,11 @@ class MultiHeadAttention(nn.Module):
         scores = scores / math.sqrt(self.d_head)
 
         # 4. 마스크 적용 (미래 토큰 가리기)
-        # 마스크가 있으면 가려야 할 위치를 -∞로 채워 Softmax에서 0이 되게 함
         if mask is not None:
-            mask = mask.unsqueeze(0).unsqueeze(1) # 차원맞추기 브로드캐스팅사용
-            scores = scores.masked_fill(mask == 0, float('-inf'))
+        # 마스크가 있으면 가려야 할 위치를 -∞로 채워 Softmax에서 0이 되게 함
+            # scores = scores.masked_fill(mask == 0, float('-inf'))
+            # FP16/FP32 환경 모두에서 100% 안전한 상숫값 사용
+            scores = scores.masked_fill(~mask, -1e4) 
 
         # softmax 점수를 확률(참고 비율)로 변환
         attn = torch.softmax(scores, dim=-1)  # (batch, n_heads, seq, seq)

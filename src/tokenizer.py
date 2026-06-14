@@ -11,7 +11,6 @@ def load_tokenizer():
     )
     return tokenizer
 
-# ↓ 이 한 줄이 핵심 — 함수를 호출해서 변수에 저장
 tokenizer = load_tokenizer()
 print(f'토크나이저 로드 완료  |  vocab size: {tokenizer.vocab_size:,}')
 

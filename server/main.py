@@ -24,10 +24,13 @@ class ChatResponse(BaseModel):
     response: str
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req:ChatRequest):
+def chat(req: ChatRequest):
     prompt = f"### 질문: {req.message}\n### 답변:"
     response = model.generate(prompt, tok)
-
+    
+    if "### 답변:" in response:
+        response = response.split("### 답변:")[-1].strip()
+    
     return {"response": response}
 
 # 맨 마지막에 추가

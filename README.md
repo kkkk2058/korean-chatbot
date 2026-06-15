@@ -4,8 +4,7 @@
 토크나이저와 모델 모두 직접 구현 → HuggingFace 라이브러리 활용 → Pretrained 파인튜닝 순서로 발전합니다.
 
 
-!image.png
-
+![alt text](image.png)
 ---
 
 ## 프로젝트 구조
@@ -287,7 +286,7 @@ uvicorn main:app --reload
 ```
 
 
-!image.png
+![alt text](image-1.png)
 
 ---
 

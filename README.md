@@ -9,6 +9,7 @@
 
 ```
 korean-chatbot/
+├── main.py                  # FastAPI 서버 진입점
 ├── src/
 │   ├── tokenizer_0.py       # BPE 토크나이저 직접 구현
 │   ├── tokenizer_bpe.py     # HuggingFace tokenizers 래퍼
@@ -17,6 +18,10 @@ korean-chatbot/
 │   ├── model_gpt2.py        # GPT2Config 기반 모델
 │   ├── model.py             # KoGPT2 pretrained 파인튜닝
 │   └── inference.py         # 추론 엔진
+├── web/
+│   ├── index.html           # 챗봇 UI
+│   ├── style.css            # 다크테마 스타일
+│   └── chat.js              # 채팅 로직 (API 통신)
 ├── notebooks/
 │   ├── prepare_data.ipynb       # 나무위키 데이터 수집·정제
 │   ├── prepare_data_k.ipynb     # KoAlpaca 데이터 준비
@@ -259,12 +264,55 @@ inference.ipynb 실행
 
 ---
 
+## 서버 실행: `main.py`
+
+학습이 완료된 모델을 FastAPI 서버로 서빙합니다.
+
+```
+POST /chat
+Body: { "message": "안녕하세요" }
+Response: { "response": "안녕하세요! 무엇을 도와드릴까요?" }
+```
+
+서버 시작 시 `src/tokenizer.py`(KoGPT2 토크나이저)와 `src/model.py`(파인튜닝된 KoGPT2)를 로드하고, `models/model_1.pt` 가중치를 주입합니다. 입력 프롬프트는 `### 질문: / ### 답변:` 포맷으로 감싸서 모델에 전달하고, 응답에서 `### 답변:` 이후 텍스트만 추출해 반환합니다.
+
+`web/` 폴더는 `/` 경로에 정적 파일로 마운트되어, 서버 하나로 API와 UI를 함께 제공합니다.
+
+```bash
+uvicorn main:app --reload
+# → http://localhost:8000 에서 챗봇 UI 접속
+```
+
+---
+
+## 웹 UI: `web/`
+
+ChatGPT 스타일의 다크테마 채팅 인터페이스입니다.
+
+| 파일 | 역할 |
+|---|---|
+| `index.html` | 사이드바 + 채팅 영역 레이아웃 |
+| `style.css` | 다크테마 (`#212121` 배경), 말풍선, 타이핑 애니메이션 |
+| `chat.js` | `POST /chat` API 호출, 메시지 렌더링, 대화 히스토리 사이드바 |
+
+주요 기능:
+
+- `Enter` 전송 / `Shift+Enter` 줄바꿈
+- 봇 응답 대기 중 타이핑 애니메이션 (점 3개 bounce)
+- 새 대화 버튼으로 채팅 초기화
+- 사이드바에 최근 입력 기록 자동 추가
+
+---
+
 ## 환경 설정
 
 ```bash
 git clone https://github.com/kkkk2058/korean-chatbot.git
 cd korean-chatbot
 pip install -r requirements.txt
+
+# 서버 실행
+uvicorn main:app --reload
 ```
 
-주요 의존성: `torch`, `transformers`, `tokenizers`, `datasets`, `tqdm`
+주요 의존성: `torch`, `transformers`, `tokenizers`, `datasets`, `tqdm`, `fastapi`, `uvicorn`

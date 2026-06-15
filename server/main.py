@@ -13,7 +13,7 @@ app = FastAPI()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tok = load_tokenizer()
 model = Transformer()
-model.load_state_dict(torch.load("models/model.pt", map_location=device))
+model.load_state_dict(torch.load("models/model_1.pt", map_location=device))
 model.to(device)
 model.eval()
 

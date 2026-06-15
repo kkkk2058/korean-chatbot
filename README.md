@@ -3,6 +3,9 @@
 한국어 언어모델을 **바닥부터 단계적으로 구현**하는 학습 프로젝트입니다.  
 토크나이저와 모델 모두 직접 구현 → HuggingFace 라이브러리 활용 → Pretrained 파인튜닝 순서로 발전합니다.
 
+
+!image.png
+
 ---
 
 ## 프로젝트 구조
@@ -282,6 +285,9 @@ Response: { "response": "안녕하세요! 무엇을 도와드릴까요?" }
 uvicorn main:app --reload
 # → http://localhost:8000 에서 챗봇 UI 접속
 ```
+
+
+!image.png
 
 ---
 

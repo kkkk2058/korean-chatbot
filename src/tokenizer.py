@@ -15,6 +15,8 @@ tokenizer = load_tokenizer()
 print(f'토크나이저 로드 완료  |  vocab size: {tokenizer.vocab_size:,}')
 
 
+
+
 # from transformers import GPT2Tokenizer
 
 # def load_tokenizer():

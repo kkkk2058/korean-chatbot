@@ -85,7 +85,7 @@ class BPETokenizer:
         from tqdm import tqdm
         
         initial_size = len(self.token_to_id)
-        pbar = tqdm(total=vocab_size, initial=initial_size, desc="📚 BPE 사전 진화 중")
+        pbar = tqdm(total=vocab_size, initial=initial_size, desc=" BPE 사전 진화 중")
         
         while len(self.token_to_id) < vocab_size:
             pairs ={}

@@ -22,10 +22,12 @@ korean-chatbot/
 │   ├── style.css
 │   └── chat.js
 ├── stage1_from_scratch/          # 바닥부터 직접 구현
+│   ├── config.py                 # ModelConfig, TrainConfig
 │   └── src/
 │       ├── model.py              # Transformer (순수 PyTorch)
 │       └── tokenizer.py          # BPETokenizer (순수 Python)
 ├── stage2_with_library/          # HuggingFace 라이브러리 활용
+│   ├── config.py                 # ModelConfig, TrainConfig, TokenizerConfig
 │   ├── src/
 │   │   ├── model.py              # GPT2Config 기반 모델
 │   │   └── tokenizer.py          # tokenizers 라이브러리 BPE
@@ -35,6 +37,7 @@ korean-chatbot/
 │       ├── train_model.ipynb     # 사전학습 (나무위키)
 │       └── inference.ipynb       # 추론 테스트
 ├── stage3_fine_tuning/           # KoGPT2 파인튜닝
+│   ├── config.py                 # TrainConfig, GenerateConfig
 │   └── colab/
 │       ├── prepare_data_koAlpaca.ipynb  # KoAlpaca 데이터 준비
 │       └── fine_tunning_koAlpaca.ipynb  # 파인튜닝 학습
@@ -84,8 +87,21 @@ Decoder-only Transformer를 PyTorch 기본 연산만으로 구현합니다.
 - `MultiHeadAttention`: Q/K/V 분리 → Scaled Dot-Product → 인과 마스크(causal mask)
 - `DecoderBlock`: Pre-LayerNorm 구조 (Attention → Add → FFN → Add), GELU 활성화
 
+### 파라미터: `stage1_from_scratch/config.py`
+
 ```python
-model = Transformer(vocab_size=8000, d_model=256, n_heads=4, n_layers=4, max_seq_len=512)
+from config import ModelConfig, TrainConfig
+
+model_cfg = ModelConfig()          # vocab_size=8000, d_model=256, n_heads=4, n_layers=4
+train_cfg = TrainConfig()          # batch_size=64, lr=3e-4, epochs=10
+
+model = Transformer(
+    vocab_size=model_cfg.vocab_size,
+    d_model=model_cfg.d_model,
+    n_heads=model_cfg.n_heads,
+    n_layers=model_cfg.n_layers,
+    max_seq_len=model_cfg.max_seq_len,
+)
 ```
 
 ---
@@ -104,6 +120,16 @@ HuggingFace `tokenizers` 라이브러리의 BPE 모델을 활용합니다.
 
 `GPT2Config`로 하이퍼파라미터를 지정하고 `GPT2LMHeadModel`을 초기화합니다.  
 내부 구조는 Stage 1과 동일하지만 구현을 라이브러리에 위임합니다.
+
+### 파라미터: `stage2_with_library/config.py`
+
+```python
+from config import ModelConfig, TrainConfig, TokenizerConfig
+
+model_cfg = ModelConfig()          # vocab_size=8000, d_model=256, n_heads=4, n_layers=4
+train_cfg = TrainConfig()          # batch_size=64, lr=3e-4, epochs=10, bf16=True
+tok_cfg = TokenizerConfig()        # vocab_size=8000, data_path, save_path
+```
 
 ---
 
@@ -130,6 +156,24 @@ HuggingFace `tokenizers` 라이브러리의 BPE 모델을 활용합니다.
 ```
 
 답변(`<bot>` 이후)만 loss 계산에 포함하고 질문 부분은 `-100`으로 마스킹합니다.
+
+### 파라미터: `stage3_fine_tuning/config.py`
+
+```python
+from config import TrainConfig, GenerateConfig
+
+train_cfg = TrainConfig()
+# batch_size=32, gradient_accumulation_steps=2 (실질 배치 64)
+# learning_rate=3e-5, lr_scheduler_type="cosine", warmup_ratio=0.1
+# epochs=5, early_stopping_patience=2, bf16=True
+# model_save_path="models/model_fine_tuning.pt"
+
+gen_cfg = GenerateConfig()
+# max_new_tokens=128, temperature=0.7, top_p=0.9
+# repetition_penalty=1.3, no_repeat_ngram_size=3
+```
+
+추론 파라미터(`GenerateConfig`)는 `app/core/engine.py`에도 연결되어 있어 한 곳에서 관리됩니다.
 
 ---
 

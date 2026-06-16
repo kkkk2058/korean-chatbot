@@ -41,7 +41,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from src.inference import InferenceEngine
+from stage3_fine_tuning.src.inference import InferenceEngine
 
 app = FastAPI()
 engine = InferenceEngine()

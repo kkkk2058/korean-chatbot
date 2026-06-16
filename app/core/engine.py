@@ -2,11 +2,13 @@ import torch
 from transformers import GPT2LMHeadModel, PreTrainedTokenizerFast
 
 from app.config import MODEL_PATH, TOKENIZER_PATH
+from stage3_fine_tuning.config import GenerateConfig
 
 
 class InferenceEngine:
     def __init__(self, model_path=MODEL_PATH, tokenizer_path=TOKENIZER_PATH, device=None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.gen_cfg = GenerateConfig()
 
         self.tokenizer = PreTrainedTokenizerFast.from_pretrained(str(tokenizer_path))
 
@@ -17,18 +19,18 @@ class InferenceEngine:
         self.model.eval()
 
     @torch.no_grad()
-    def generate(self, prompt: str, max_new_tokens: int = 128, temperature: float = 0.7) -> str:
+    def generate(self, prompt: str) -> str:
         enc = self.tokenizer(f"<usr>{prompt}<bot>", return_tensors="pt").to(self.device)
 
         output_ids = self.model.generate(
             input_ids=enc["input_ids"],
             attention_mask=enc["attention_mask"],
-            max_new_tokens=max_new_tokens,
+            max_new_tokens=self.gen_cfg.max_new_tokens,
             do_sample=True,
-            temperature=temperature,
-            top_p=0.9,
-            repetition_penalty=1.3,
-            no_repeat_ngram_size=3,
+            temperature=self.gen_cfg.temperature,
+            top_p=self.gen_cfg.top_p,
+            repetition_penalty=self.gen_cfg.repetition_penalty,
+            no_repeat_ngram_size=self.gen_cfg.no_repeat_ngram_size,
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
         )

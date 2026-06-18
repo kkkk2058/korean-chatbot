@@ -1,9 +1,12 @@
 import json
-
+from tqdm import tqdm
 
 class BPETokenizer:
     def __init__(self):
+        ## Greedy (sorted) 방식
         # 사전 만들기 토큰을 id로
+        # 특수 토큰에 공백을 대체할 특수 문자 추가 (SentencePiece 방식)
+        self.SPACE_TOKEN = " "  # U+2581 (특수 공백 문자)
         # 기본 토큰 넣기
         self.token_to_id = {
             "[PAD]": 0, # 문장 길이 맞추는 패딩
@@ -13,8 +16,14 @@ class BPETokenizer:
         }
         # 뒤집어서 id를 토큰으로
         self.id_to_token = {v: k for k, v in self.token_to_id.items()}
+        self.sorted_vocab = sorted(self.token_to_id.keys(), key=len, reverse=True)
+
+
+
 
     def encode(self, text: str) -> list[int]:
+
+        text = text.replace(" ", self.SPACE_TOKEN)
         ids = []
         # 기본 토큰 추가
         ids.append(self.token_to_id["[BOS]"])
@@ -48,12 +57,15 @@ class BPETokenizer:
                 continue
             else:
                 tokens.append(self.id_to_token[id])
-        # 합쳐서 리턴
-        return "".join(tokens)
+        # 합쳐서 리턴 + 골백문자 띄어쓰기로 변경
+        return "".join(tokens).replace(self.SPACE_TOKEN, " ")
 
 
     def train(self, texts: list[str], vocab_size: int):
-        unique_chars = set("".join(texts))
+        processed_texts = [text.replace(" ", self.SPACE_TOKEN) for text in texts]
+        unique_chars = set("".join(processed_texts))
+        
+        # 사전 학습 학습 효율(시간)이 너무 떨어진다.  (가~힣,아스키 제외)
         for char in unique_chars:
             if char not in self.token_to_id:
                 new_id = len(self.token_to_id)
@@ -61,28 +73,26 @@ class BPETokenizer:
                 self.id_to_token[new_id] = char
 
 
-        for code in range(32, 127):
-            char = chr(code)
-            if char not in self.token_to_id:
-                new_id = len(self.token_to_id)
-                self.token_to_id[char] = new_id
-                self.id_to_token[new_id] = char
+        # 불필요한 할당/아스키 문자 삭제 (존재하는 문자만 초기 사전에 추가)
+        # for code in range(32, 127):
+        #     char = chr(code)
+        #     if char not in self.token_to_id:
+        #         new_id = len(self.token_to_id)
+        #         self.token_to_id[char] = new_id
+        #         self.id_to_token[new_id] = char
                 
-        for code in range(0xAC00, 0xD7A4):  # 가 ~ 힣
-            char = chr(code)
-            if char not in self.token_to_id:
-                new_id = len(self.token_to_id)
-                self.token_to_id[char] = new_id
-                self.id_to_token[new_id] = char
+        # for code in range(0xAC00, 0xD7A4):  # 가 ~ 힣
+        #     char = chr(code)
+        #     if char not in self.token_to_id:
+        #         new_id = len(self.token_to_id)
+        #         self.token_to_id[char] = new_id
+        #         self.id_to_token[new_id] = char
 
 
-              
+        
         corpus = []
-        for text in texts:
-          for word in text.split():
-              corpus.append(list(word))
-
-        from tqdm import tqdm
+        for text in processed_texts :
+            corpus.append(list(text))
         
         initial_size = len(self.token_to_id)
         pbar = tqdm(total=vocab_size, initial=initial_size, desc=" BPE 사전 진화 중")
@@ -101,19 +111,24 @@ class BPETokenizer:
             best_pair = max(pairs, key = lambda x:pairs[x])
 
             new_token = best_pair[0] + best_pair[1]
-            new_id = len(self.token_to_id)   
-            # [안전장치] 이미 사전에 있는 토큰이라면 이번 병합은 건너 뜀
-            if new_token in self.token_to_id:
-                break        # 현재 vocab 크기가 다음 id
-            self.token_to_id[new_token] = new_id
-            self.id_to_token[new_id] = new_token
 
+            # new_id = len(self.token_to_id)   
+            # # [안전장치] 이미 사전에 있는 토큰이라면 이번 병합은 건너 뜀
+            # if new_token in self.token_to_id:
+            #     break       # 현재 vocab 크기가 다음 id
 
-            pbar.update(1)
-            pbar.set_postfix(vocab_now=len(self.token_to_id))
+            if new_token not in self.token_to_id:
+                new_id = len(self.token_to_id)   
+                self.token_to_id[new_token] = new_id
+                self.id_to_token[new_id] = new_token
+
+                pbar.update(1)
+                pbar.set_postfix(vocab_now=len(self.token_to_id))
+                
+                
+            
             # corpus 업데이트
             new_corpus = []
-            
 
             for word in corpus:
                 new_word = []

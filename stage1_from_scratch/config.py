@@ -18,17 +18,17 @@
 #     grad_clip: float = 1.0
 
 # 토크나이저
-VOCAB_SIZE   = 8_000
+VOCAB_SIZE   = 16_000
 TOKENIZER_PATH = "tokenizer.json"
 
 # 모델
-D_MODEL      = 256
+D_MODEL      = 512
 N_HEADS      = 8
-N_LAYERS     = 6
+N_LAYERS     = 12
 MAX_SEQ_LEN  = 512
 DROPOUT      = 0.1
 
 # 학습
-BATCH_SIZE   = 32
+BATCH_SIZE   = 64
 LR           = 3e-4
-EPOCHS       = 10
+EPOCHS       = 20

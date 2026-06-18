@@ -18,7 +18,7 @@
 #     grad_clip: float = 1.0
 
 # 토크나이저
-VOCAB_SIZE   = 16_000
+VOCAB_SIZE   = 8_000
 TOKENIZER_PATH = "tokenizer.json"
 
 # 모델

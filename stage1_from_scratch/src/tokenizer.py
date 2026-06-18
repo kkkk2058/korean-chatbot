@@ -192,7 +192,6 @@ class BPETokenizer:
 
     # ----------------------- 학습 -----------------------
     def _get_word_freqs(self, corpus):
-        """문장 리스트 -> 단어별 등장 횟수"""
         word_freqs = defaultdict(int)
         for line in corpus:
             for word in line.strip().split():
@@ -200,66 +199,86 @@ class BPETokenizer:
         return word_freqs
 
     def _build_initial_splits(self, word_freqs):
-        """각 단어를 글자 단위로 쪼개고 끝에 </w>(단어 끝 표시) 붙이기"""
         return {word: list(word) + ["</w>"] for word in word_freqs}
 
     def _count_pairs(self, splits, word_freqs):
-        """인접한 토큰 쌍의 빈도 세기"""
         pairs = defaultdict(int)
         for word, symbols in splits.items():
+            freq = word_freqs[word]
             for i in range(len(symbols) - 1):
-                pairs[(symbols[i], symbols[i + 1])] += word_freqs[word]
+                pairs[(symbols[i], symbols[i + 1])] += freq
         return pairs
 
-    def _merge(self, pair, splits):
-        """가장 빈도 높은 쌍을 하나의 토큰으로 합치기"""
+    def _merge_incremental(self, pair, splits, word_freqs, pairs):
+        """pair를 병합하고 pair 카운트를 증분(incremental)으로 업데이트.
+        매 스텝 전체 재스캔 대신 변경된 이웃만 갱신해 O(corpus) → O(pair_occurrences)."""
         a, b = pair
         merged = a + b
+
         for word, symbols in splits.items():
+            freq = word_freqs[word]
             new_symbols = []
             i = 0
             while i < len(symbols):
                 if i < len(symbols) - 1 and symbols[i] == a and symbols[i + 1] == b:
+                    # 왼쪽 이웃 pair 갱신
+                    if new_symbols:
+                        left = new_symbols[-1]
+                        pairs[(left, a)] -= freq
+                        if pairs[(left, a)] <= 0:
+                            del pairs[(left, a)]
+                        pairs[(left, merged)] = pairs.get((left, merged), 0) + freq
+                    # 오른쪽 이웃 pair 갱신
+                    if i + 2 < len(symbols):
+                        right = symbols[i + 2]
+                        pairs[(b, right)] -= freq
+                        if pairs[(b, right)] <= 0:
+                            del pairs[(b, right)]
+                        pairs[(merged, right)] = pairs.get((merged, right), 0) + freq
                     new_symbols.append(merged)
                     i += 2
                 else:
                     new_symbols.append(symbols[i])
                     i += 1
             splits[word] = new_symbols
-        return splits
 
-    def train(self, corpus, vocab_size=8000, verbose=True):
+        # 병합된 pair 자체 제거
+        if (a, b) in pairs:
+            del pairs[(a, b)]
+
+    def train(self, corpus, vocab_size=8000, max_corpus_lines=None, verbose=True):
+        if max_corpus_lines:
+            corpus = corpus[:max_corpus_lines]
+
         print("1. 말뭉치 빈도 분석 및 초기 분할 생성 중...")
         word_freqs = self._get_word_freqs(corpus)
         splits = self._build_initial_splits(word_freqs)
 
-        # 기본 vocab = 스페셜 토큰 + 코퍼스에 등장하는 모든 글자
         base_vocab = set()
-        for symbols in tqdm(splits.values(), desc="기초 글자 추출", disable=not verbose):
+        for symbols in splits.values():
             base_vocab.update(symbols)
         tokens = list(self.special_tokens) + sorted(base_vocab)
 
-        # vocab_size 채울 때까지 merge 반복
         num_merges = vocab_size - len(tokens)
         if num_merges <= 0:
             print(f"이미 목표 vocab_size({vocab_size})를 넘는 기초 토큰({len(tokens)})이 존재합니다.")
             num_merges = 0
 
         print(f"2. BPE 토큰 병합(Merge) 시작 (목표 횟수: {num_merges}회)...")
-        
-        # 주피터 노트북 최적화 진행바
+
+        # 첫 번째만 전체 스캔, 이후 증분 업데이트
+        pairs = self._count_pairs(splits, word_freqs)
+
         pbar = tqdm(range(num_merges), desc="BPE 학습 진행률", disable=not verbose)
         for i in pbar:
-            pairs = self._count_pairs(splits, word_freqs)
             if not pairs:
                 break
-            best = max(pairs, key=pairs.get)   # 가장 자주 붙어 나오는 쌍
-            splits = self._merge(best, splits)
+            best = max(pairs, key=pairs.get)
+            self._merge_incremental(best, splits, word_freqs, pairs)
             self.merges.append(best)
             tokens.append(best[0] + best[1])
-            
-            # 주피터 환경에서 출력 밀림을 방지하기 위해 desc를 실시간 변경
-            if verbose and (i + 1) % 10 == 0:  # 너무 자주 바꾸면 느려지므로 10번마다 업데이트
+
+            if verbose and (i + 1) % 100 == 0:
                 pbar.set_description(f"BPE 학습 중 [ '{best[0]}' + '{best[1]}' ]")
 
         self.vocab = {tok: idx for idx, tok in enumerate(tokens)}
@@ -336,13 +355,13 @@ def load_koalpaca_corpus(split="train"):
     return corpus
 
 
-def train_on_koalpaca(vocab_size=8000, split="train", save_path="ko_bpe.json"):
+def train_on_koalpaca(vocab_size=8000, split="train", save_path="ko_bpe.json", max_corpus_lines=None):
     """KoAlpaca로 BPE 토크나이저를 학습하고 저장"""
     corpus = load_koalpaca_corpus(split=split)
     print(f"코퍼스 수집 완료. 총 문장 수: {len(corpus)}")
 
     tokenizer = BPETokenizer()
-    tokenizer.train(corpus, vocab_size=vocab_size)
+    tokenizer.train(corpus, vocab_size=vocab_size, max_corpus_lines=max_corpus_lines)
     tokenizer.save(save_path)
     print(f"💾 파일 저장 완료 -> {save_path}")
     return tokenizer

@@ -209,13 +209,23 @@ class BPETokenizer:
                 pairs[(symbols[i], symbols[i + 1])] += freq
         return pairs
 
-    def _merge_incremental(self, pair, splits, word_freqs, pairs):
-        """pair를 병합하고 pair 카운트를 증분(incremental)으로 업데이트.
-        매 스텝 전체 재스캔 대신 변경된 이웃만 갱신해 O(corpus) → O(pair_occurrences)."""
+    def _build_pair_index(self, splits):
+        """pair → 그 pair가 등장하는 단어들의 집합 (역인덱스)"""
+        index = defaultdict(set)
+        for word, symbols in splits.items():
+            for i in range(len(symbols) - 1):
+                index[(symbols[i], symbols[i + 1])].add(word)
+        return index
+
+    def _merge_incremental(self, pair, splits, word_freqs, pairs, pair_index):
+        """pair가 포함된 단어만 순회해 O(전체단어) → O(해당pair등장단어) 로 단축."""
         a, b = pair
         merged = a + b
 
-        for word, symbols in splits.items():
+        affected_words = list(pair_index.get(pair, []))
+
+        for word in affected_words:
+            symbols = splits[word]
             freq = word_freqs[word]
             new_symbols = []
             i = 0
@@ -227,14 +237,18 @@ class BPETokenizer:
                         pairs[(left, a)] -= freq
                         if pairs[(left, a)] <= 0:
                             del pairs[(left, a)]
+                        pair_index[(left, a)].discard(word)
                         pairs[(left, merged)] = pairs.get((left, merged), 0) + freq
+                        pair_index[(left, merged)].add(word)
                     # 오른쪽 이웃 pair 갱신
                     if i + 2 < len(symbols):
                         right = symbols[i + 2]
                         pairs[(b, right)] -= freq
                         if pairs[(b, right)] <= 0:
                             del pairs[(b, right)]
+                        pair_index[(b, right)].discard(word)
                         pairs[(merged, right)] = pairs.get((merged, right), 0) + freq
+                        pair_index[(merged, right)].add(word)
                     new_symbols.append(merged)
                     i += 2
                 else:
@@ -243,8 +257,10 @@ class BPETokenizer:
             splits[word] = new_symbols
 
         # 병합된 pair 자체 제거
-        if (a, b) in pairs:
-            del pairs[(a, b)]
+        if pair in pairs:
+            del pairs[pair]
+        if pair in pair_index:
+            del pair_index[pair]
 
     def train(self, corpus, vocab_size=8000, max_corpus_lines=None, verbose=True):
         if max_corpus_lines:
@@ -266,15 +282,15 @@ class BPETokenizer:
 
         print(f"2. BPE 토큰 병합(Merge) 시작 (목표 횟수: {num_merges}회)...")
 
-        # 첫 번째만 전체 스캔, 이후 증분 업데이트
         pairs = self._count_pairs(splits, word_freqs)
+        pair_index = self._build_pair_index(splits)
 
         pbar = tqdm(range(num_merges), desc="BPE 학습 진행률", disable=not verbose)
         for i in pbar:
             if not pairs:
                 break
             best = max(pairs, key=pairs.get)
-            self._merge_incremental(best, splits, word_freqs, pairs)
+            self._merge_incremental(best, splits, word_freqs, pairs, pair_index)
             self.merges.append(best)
             tokens.append(best[0] + best[1])
 

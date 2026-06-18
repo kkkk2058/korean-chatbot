@@ -21,4 +21,5 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 .json
-.pt
+.ptstage1_from_scratch/model/checkpoint.pt
+stage1_from_scratch/model/*.pt

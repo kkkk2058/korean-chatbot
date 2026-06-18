@@ -189,6 +189,7 @@ class BPETokenizer:
         self.id_to_token = {}    # id(int)  -> token(str)
         self.merges = []         # 학습된 merge 규칙 (순서 중요): [(a, b), ...]
         self.special_tokens = ["<pad>", "<unk>", "<s>", "</s>"]
+        self._encode_cache = {}  # word -> [id, ...] 캐시
 
     # ----------------------- 학습 -----------------------
     def _get_word_freqs(self, corpus):
@@ -304,7 +305,6 @@ class BPETokenizer:
 
     # ----------------------- 인코딩 / 디코딩 -----------------------
     def _tokenize_word(self, word):
-        """한 단어에 학습된 merge 규칙을 순서대로 적용"""
         symbols = list(word) + ["</w>"]
         for a, b in self.merges:
             new_symbols = []
@@ -320,12 +320,13 @@ class BPETokenizer:
         return symbols
 
     def encode(self, text):
-        """문자열 -> id 리스트"""
+        """문자열 -> id 리스트 (단어 단위 영구 캐싱으로 반복 단어 재계산 방지)"""
         unk = self.vocab["<unk>"]
         ids = []
         for word in text.strip().split():
-            for tok in self._tokenize_word(word):
-                ids.append(self.vocab.get(tok, unk))
+            if word not in self._encode_cache:
+                self._encode_cache[word] = [self.vocab.get(tok, unk) for tok in self._tokenize_word(word)]
+            ids.extend(self._encode_cache[word])
         return ids
 
     def decode(self, ids):
@@ -351,6 +352,7 @@ class BPETokenizer:
         self.merges = [tuple(m) for m in data["merges"]]
         self.special_tokens = data["special_tokens"]
         self.id_to_token = {int(idx): tok for tok, idx in self.vocab.items()}
+        self._encode_cache = {}
 
 
 def load_koalpaca_corpus(split="train"):

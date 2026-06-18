@@ -20,3 +20,5 @@ __pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
+.json
+.pt

@@ -29,6 +29,6 @@ MAX_SEQ_LEN  = 512
 DROPOUT      = 0.1
 
 # 학습
-BATCH_SIZE   = 64
+BATCH_SIZE   = 32
 LR           = 3e-4
 EPOCHS       = 20

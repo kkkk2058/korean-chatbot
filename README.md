@@ -22,10 +22,12 @@ korean-chatbot/
 │   ├── style.css
 │   └── chat.js
 ├── stage1_from_scratch/          # 바닥부터 직접 구현
-│   ├── config.py                 # ModelConfig, TrainConfig
-│   └── src/
-│       ├── model.py              # Transformer (순수 PyTorch)
-│       └── tokenizer.py          # BPETokenizer (순수 Python)
+│   ├── config.py                 # 토크나이저·모델·학습 하이퍼파라미터
+│   ├── src/
+│   │   ├── model.py              # Transformer (순수 PyTorch)
+│   │   └── tokenizer.py          # BPETokenizer (순수 Python)
+│   └── colab/
+│       └── train_model.ipynb     # 위키 사전학습 → KoAlpaca 파인튜닝 → 생성
 ├── stage2_with_library/          # HuggingFace 라이브러리 활용
 │   ├── config.py                 # ModelConfig, TrainConfig, TokenizerConfig
 │   ├── src/
@@ -56,27 +58,44 @@ korean-chatbot/
 |---|---|---|---|
 | 토크나이저 | 순수 Python BPE | `tokenizers` 라이브러리 | KoGPT2 pretrained |
 | 모델 | 순수 PyTorch Transformer | GPT2Config 기반 | skt/kogpt2-base-v2 |
-| vocab size | 자유 설정 | 8,000 (나무위키) | 51,200 (KoGPT2) |
-| 학습 데이터 | 커스텀 | 나무위키 | KoAlpaca |
+| vocab size | 16,000 (위키피디아) | 8,000 (나무위키) | 51,200 (KoGPT2) |
+| 학습 데이터 | 위키 사전학습 + KoAlpaca 파인튜닝 | 나무위키 | KoAlpaca |
 | 목적 | 내부 원리 이해 | 실용적 구현 | 성능 극대화 |
 
 ---
 
 ## Stage 1 — 바닥부터 직접 구현
 
+라이브러리 없이 BPE 토크나이저와 Transformer를 직접 구현하고,
+**한국어 위키피디아로 사전학습 → KoAlpaca로 파인튜닝**하는 전체 파이프라인입니다.
+모든 과정은 `stage1_from_scratch/colab/train_model.ipynb` 한 노트북에서 실행되며,
+산출물(토크나이저·체크포인트·변환 캐시)은 Google Drive에 저장돼 런타임 재시작에도 복원됩니다.
+
+### 학습 흐름
+
+```
+위키 30k문서 → BPE(vocab 16k) 학습 → tokenizer.json
+                    ↓
+위키 100k줄 → 사전학습 (FP16, eff.batch 64, lr 3e-4) → 언어 이해
+                    ↓ (가중치 이어받기)
+KoAlpaca 21k → 파인튜닝 (답변만 -100 마스킹 학습, lr 3e-4) → QA 형식
+                    ↓
+생성 (temperature 0.8, top_k 30, repetition_penalty 1.3)
+```
+
 ### 토크나이저: `stage1_from_scratch/src/tokenizer.py`
 
 `BPETokenizer` 클래스를 순수 Python으로 구현합니다.
 
-- 특수 토큰 4종: `[PAD](0)`, `[BOS](1)`, `[EOS](2)`, `[UNK](3)`
-- 학습 텍스트 + ASCII(32~126) + 한글 전체(가\~힣)를 기본 vocab에 추가
-- BPE 알고리즘으로 자주 등장하는 문자 쌍을 반복 병합해 vocab 확장
+- 특수 토큰 4종: `<pad>`, `<unk>`, `<s>`, `</s>`
+- BPE 알고리즘으로 자주 등장하는 문자 쌍을 반복 병합해 vocab(16,000) 확장
+- 속도 최적화: **증분 pair 카운트 업데이트 + pair 역인덱스 + 단어 단위 인코딩 캐시** (5시간 → 수 분)
 - `encode` / `decode` / `save` / `load` 인터페이스 제공
 
 ```python
 tok = BPETokenizer()
-tok.train(texts, vocab_size=8000)
-tok.save("models/vocab.json")
+tok.train(wiki_texts, vocab_size=16000)
+tok.save("tokenizer.json")
 ```
 
 ### 모델: `stage1_from_scratch/src/model.py`
@@ -89,20 +108,40 @@ Decoder-only Transformer를 PyTorch 기본 연산만으로 구현합니다.
 
 ### 파라미터: `stage1_from_scratch/config.py`
 
-```python
-from config import ModelConfig, TrainConfig
+| 구분 | 항목 | 값 |
+|---|---|---|
+| 토크나이저 | `VOCAB_SIZE` | 16,000 |
+| 모델 | `D_MODEL` / `N_HEADS` / `N_LAYERS` | 512 / 8 / 12 |
+| 모델 | `MAX_SEQ_LEN` / `DROPOUT` | 512 / 0.1 |
+| 사전학습 | `PRETRAIN_BATCH_SIZE` × `GRAD_ACCUM` | 16 × 4 (실질 64) |
+| 사전학습 | `PRETRAIN_LR` / `EPOCHS` | 3e-4 / 3+ |
+| 파인튜닝 | `FINETUNE_BATCH_SIZE` × `GRAD_ACCUM` | 16 × 4 (실질 64) |
+| 파인튜닝 | LR / `EPOCHS` | 3e-4 / 10 |
 
-model_cfg = ModelConfig()          # vocab_size=8000, d_model=256, n_heads=4, n_layers=4
-train_cfg = TrainConfig()          # batch_size=64, lr=3e-4, epochs=10
+### 사전학습 (위키피디아)
 
-model = Transformer(
-    vocab_size=model_cfg.vocab_size,
-    d_model=model_cfg.d_model,
-    n_heads=model_cfg.n_heads,
-    n_layers=model_cfg.n_layers,
-    max_seq_len=model_cfg.max_seq_len,
-)
-```
+- 위키피디아 30,000 문서를 `streaming`으로 받아 약 100,000줄을 학습 (순수 Python BPE라 전체 변환은 비현실적)
+- **FP16 mixed precision + gradient accumulation**으로 A100 40GB 내 학습
+- 변환 결과를 Drive에 캐시(`pretrain_ids.pt`)해 재실행 시 즉시 로드
+- 체크포인트에 **scheduler/scaler state까지 저장** → 이어학습 시 LR 폭등 방지
+
+### 파인튜닝 (KoAlpaca)
+
+- 프롬프트 형식: `질문: {q}\n답변: {a}`
+- **답변 토큰만 loss 계산** (질문 부분은 `-100`으로 마스킹) → "답변하는 모델"로 전환되는 핵심
+- 사전학습 가중치를 이어받아 lr 3e-4로 파인튜닝
+
+### 생성
+
+| 파라미터 | 값 | 역할 |
+|---|---|---|
+| `temperature` | 0.8 | 다양성 |
+| `top_k` | 30 | 상위 토큰만 샘플링 |
+| `repetition_penalty` | 1.3 | 반복 루프 억제 |
+| `max_new_tokens` | 100 | 깨지기 전 종료 |
+
+> **한계**: 모델이 작고 사전학습 perplexity가 높아 문장 단위 일관성은 되지만 사실 정확성/긴 문맥은 약합니다.
+> 개선하려면 사전학습 데이터(`MAX_TRAIN_LINES`)를 늘려 사전학습 loss를 더 낮추는 것이 핵심입니다.
 
 ---
 
@@ -176,6 +215,20 @@ gen_cfg = GenerateConfig()
 추론 파라미터(`GenerateConfig`)는 `app/core/engine.py`에도 연결되어 있어 한 곳에서 관리됩니다.
 
 ---
+
+## Colab 실행 가이드 (Stage 1)
+
+`train_model.ipynb` 한 노트북을 위에서 아래로 실행하면 됩니다. (A100 권장)
+
+```
+0. 환경 설정        → Drive 마운트 + 레포 클론/풀
+1. 토크나이저       → tokenizer.json (없으면 위키로 학습, 있으면 로드)
+2. 모델 초기화
+3. 사전학습         → pretrain_checkpoint.pt (위키 100k줄, 이어학습 지원)
+4. 파인튜닝         → finetune_checkpoint.pt (KoAlpaca, 답변만 마스킹 학습)
+5. 생성 테스트
+6. Drive 저장
+```
 
 ## Colab 실행 가이드 (Stage 2)
 

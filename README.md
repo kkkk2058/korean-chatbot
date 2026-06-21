@@ -1,7 +1,10 @@
 # Korean Chatbot 프로젝트
 
-한국어 언어모델을 **바닥부터 단계적으로 구현**하는 학습 프로젝트입니다.  
-토크나이저와 모델을 직접 구현하는 것부터 시작해, HuggingFace 라이브러리 활용, KoGPT2 파인튜닝까지 단계별로 발전시킵니다.
+한국어 언어모델을 **바닥부터 단계적으로 구현**하는 학습 프로젝트입니다.
+토크나이저와 Transformer를 라이브러리 없이 직접 만드는 것에서 시작해,
+HuggingFace 라이브러리 활용, KoGPT2 파인튜닝까지 3단계로 발전시킵니다.
+
+**현재 서버는 Stage 1(직접 구현) 모델을 서빙합니다.**
 
 ![챗봇 UI](image-2.png)
 
@@ -11,40 +14,34 @@
 
 ```
 korean-chatbot/
-├── app/                          # 서빙 레이어
-│   ├── config.py                 # 경로·설정 관리
-│   ├── main.py                   # FastAPI 진입점
+├── app/                          # 서빙 레이어 (FastAPI)
+│   ├── config.py                 # 경로·생성 파라미터
+│   ├── main.py                   # FastAPI 진입점 (POST /chat + web UI)
 │   └── core/
-│       ├── model.py              # Transformer 클래스
-│       └── engine.py             # InferenceEngine
-├── web/                          # 프론트엔드
+│       ├── model.py              # Decoder-only Transformer
+│       ├── tokenizer.py          # BPE 토크나이저 (추론 전용)
+│       └── engine.py             # InferenceEngine (모델 로드 + 생성)
+├── web/                          # 프론트엔드 (정적)
 │   ├── index.html
 │   ├── style.css
 │   └── chat.js
-├── stage1_from_scratch/          # 바닥부터 직접 구현
+├── stage1_from_scratch/          # ① 바닥부터 직접 구현 (현재 서빙)
 │   ├── config.py                 # 토크나이저·모델·학습 하이퍼파라미터
 │   ├── src/
 │   │   ├── model.py              # Transformer (순수 PyTorch)
 │   │   └── tokenizer.py          # BPETokenizer (순수 Python)
+│   ├── tokenizer/tokenizer.json  # 학습된 BPE 토크나이저 (vocab 16k)
 │   └── colab/
 │       └── train_model.ipynb     # 위키 사전학습 → KoAlpaca 파인튜닝 → 생성
-├── stage2_with_library/          # HuggingFace 라이브러리 활용
-│   ├── config.py                 # ModelConfig, TrainConfig, TokenizerConfig
-│   ├── src/
-│   │   ├── model.py              # GPT2Config 기반 모델
-│   │   └── tokenizer.py          # tokenizers 라이브러리 BPE
-│   └── colab/
-│       ├── prepare_data.ipynb    # 나무위키 데이터 수집·정제
-│       ├── train_tokenizer.ipynb # BPE 토크나이저 학습
-│       ├── train_model.ipynb     # 사전학습 (나무위키)
-│       └── inference.ipynb       # 추론 테스트
-├── stage3_fine_tuning/           # KoGPT2 파인튜닝
-│   ├── config.py                 # TrainConfig, GenerateConfig
-│   └── colab/
-│       ├── prepare_data_koAlpaca.ipynb  # KoAlpaca 데이터 준비
-│       └── fine_tunning_koAlpaca.ipynb  # 파인튜닝 학습
-├── models/                       # 학습된 모델 가중치 (git 제외)
-├── my_tokenizer/                 # 파인튜닝용 토크나이저
+├── stage2_with_library/          # ② HuggingFace 라이브러리 활용
+│   ├── config.py
+│   ├── src/{model.py, tokenizer.py}
+│   └── colab/{prepare_data, train_tokenizer, train_model, inference}.ipynb
+├── stage3_fine_tuning/           # ③ KoGPT2 파인튜닝
+│   ├── config.py
+│   └── colab/{prepare_data_koAlpaca, fine_tunning_koAlpaca}.ipynb
+├── models/                       # 학습된 가중치 (git 제외)
+│   └── model_scratch.pt          # ← 현재 서빙 중인 Stage 1 모델
 ├── data/                         # 학습 데이터 (git 제외)
 ├── Makefile
 └── requirements.txt
@@ -64,7 +61,7 @@ korean-chatbot/
 
 ---
 
-## Stage 1 — 바닥부터 직접 구현
+## Stage 1 — 바닥부터 직접 구현 (현재 서빙 버전)
 
 라이브러리 없이 BPE 토크나이저와 Transformer를 직접 구현하고,
 **한국어 위키피디아로 사전학습 → KoAlpaca로 파인튜닝**하는 전체 파이프라인입니다.
@@ -118,6 +115,8 @@ Decoder-only Transformer를 PyTorch 기본 연산만으로 구현합니다.
 | 파인튜닝 | `FINETUNE_BATCH_SIZE` × `GRAD_ACCUM` | 16 × 4 (실질 64) |
 | 파인튜닝 | LR / `EPOCHS` | 3e-4 / 10 |
 
+> 파라미터 수 약 52M. 모델 가중치만 저장 시 약 210MB (`model_scratch.pt`).
+
 ### 사전학습 (위키피디아)
 
 - 위키피디아 30,000 문서를 `streaming`으로 받아 약 100,000줄을 학습 (순수 Python BPE라 전체 변환은 비현실적)
@@ -140,7 +139,7 @@ Decoder-only Transformer를 PyTorch 기본 연산만으로 구현합니다.
 | `repetition_penalty` | 1.3 | 반복 루프 억제 |
 | `max_new_tokens` | 100 | 깨지기 전 종료 |
 
-> **한계**: 모델이 작고 사전학습 perplexity가 높아 문장 단위 일관성은 되지만 사실 정확성/긴 문맥은 약합니다.
+> **한계**: 약 52M 파라미터의 소형 모델이라 문장 단위 일관성은 되지만 사실 정확성·긴 문맥은 약합니다.
 > 개선하려면 사전학습 데이터(`MAX_TRAIN_LINES`)를 늘려 사전학습 loss를 더 낮추는 것이 핵심입니다.
 
 ---
@@ -157,7 +156,7 @@ HuggingFace `tokenizers` 라이브러리의 BPE 모델을 활용합니다.
 
 ### 모델: `stage2_with_library/src/model.py`
 
-`GPT2Config`로 하이퍼파라미터를 지정하고 `GPT2LMHeadModel`을 초기화합니다.  
+`GPT2Config`로 하이퍼파라미터를 지정하고 `GPT2LMHeadModel`을 초기화합니다.
 내부 구조는 Stage 1과 동일하지만 구현을 라이브러리에 위임합니다.
 
 ### 파라미터: `stage2_with_library/config.py`
@@ -172,7 +171,7 @@ tok_cfg = TokenizerConfig()        # vocab_size=8000, data_path, save_path
 
 ---
 
-## Stage 3 — KoGPT2 파인튜닝 (현재 서빙 버전)
+## Stage 3 — KoGPT2 파인튜닝
 
 `skt/kogpt2-base-v2` 사전학습 모델을 KoAlpaca 질문/답변 데이터로 파인튜닝합니다.
 
@@ -195,30 +194,15 @@ tok_cfg = TokenizerConfig()        # vocab_size=8000, data_path, save_path
 ```
 
 답변(`<bot>` 이후)만 loss 계산에 포함하고 질문 부분은 `-100`으로 마스킹합니다.
-
-### 파라미터: `stage3_fine_tuning/config.py`
-
-```python
-from config import TrainConfig, GenerateConfig
-
-train_cfg = TrainConfig()
-# batch_size=32, gradient_accumulation_steps=2 (실질 배치 64)
-# learning_rate=3e-5, lr_scheduler_type="cosine", warmup_ratio=0.1
-# epochs=5, early_stopping_patience=2, bf16=True
-# model_save_path="models/model_fine_tuning.pt"
-
-gen_cfg = GenerateConfig()
-# max_new_tokens=128, temperature=0.7, top_p=0.9
-# repetition_penalty=1.3, no_repeat_ngram_size=3
-```
-
-추론 파라미터(`GenerateConfig`)는 `app/core/engine.py`에도 연결되어 있어 한 곳에서 관리됩니다.
+(Stage 1의 답변-마스킹 파인튜닝과 동일한 원리)
 
 ---
 
-## Colab 실행 가이드 (Stage 1)
+## Colab 실행 가이드
 
-`train_model.ipynb` 한 노트북을 위에서 아래로 실행하면 됩니다. (A100 권장)
+### Stage 1
+
+`train_model.ipynb` 한 노트북을 위에서 아래로 실행합니다. (A100 권장)
 
 ```
 0. 환경 설정        → Drive 마운트 + 레포 클론/풀
@@ -230,9 +214,7 @@ gen_cfg = GenerateConfig()
 6. Drive 저장
 ```
 
-## Colab 실행 가이드 (Stage 2)
-
-모든 노트북은 첫 셀에서 Google Drive 마운트 + GitHub 레포 클론/풀을 자동 처리합니다.
+### Stage 2
 
 ```
 1. prepare_data.ipynb       → data/namuwiki.txt 생성 (나무위키 10만 문장)
@@ -241,7 +223,7 @@ gen_cfg = GenerateConfig()
 4. inference.ipynb          → 추론 테스트
 ```
 
-## Colab 실행 가이드 (Stage 3)
+### Stage 3
 
 ```
 1. prepare_data_koAlpaca.ipynb   → data/train.txt 생성 (KoAlpaca QA 포맷)
@@ -254,12 +236,15 @@ gen_cfg = GenerateConfig()
 
 | 데이터셋 | 출처 | 용도 |
 |---|---|---|
-| 나무위키 | `heegyu/namuwiki-extracted` | 토크나이저 학습 + 사전학습 |
+| 위키피디아 | `wikimedia/wikipedia` (20231101.ko) | Stage 1 토크나이저 학습 + 사전학습 |
+| 나무위키 | `heegyu/namuwiki-extracted` | Stage 2 토크나이저 학습 + 사전학습 |
 | KoAlpaca v1.1a | `beomi/KoAlpaca-v1.1a` | 파인튜닝 (질문-답변) |
 
 ---
 
 ## 서버 실행
+
+`app/`은 **Stage 1 from-scratch 모델**(`models/model_scratch.pt`)을 서빙합니다.
 
 ```bash
 git clone https://github.com/kkkk2058/korean-chatbot.git
@@ -267,10 +252,27 @@ cd korean-chatbot
 make install   # pip install -r requirements.txt
 
 make run       # uvicorn app.main:app --reload
-# → http://localhost:8000
+# → http://localhost:8000  (브라우저로 열면 채팅 UI)
 ```
 
-API 스펙:
+### 모델 파일 준비
+
+서버는 아래 두 파일이 필요하며, **반드시 같은 학습 세션의 짝**이어야 합니다 (토크나이저 ↔ 모델 불일치 시 출력이 깨짐):
+
+```
+models/model_scratch.pt                         # Stage 1 모델 가중치 (state_dict)
+stage1_from_scratch/tokenizer/tokenizer.json    # 학습에 쓴 BPE 토크나이저
+```
+
+경로는 환경변수 `MODEL_PATH` / `TOKENIZER_PATH`로 override 가능합니다.
+모델 아키텍처(vocab·d_model·n_layers·max_seq_len)는 체크포인트 shape에서 **자동 추론**되며,
+`n_heads`만 학습 때 값과 동일하게 `app/config.py`(또는 `N_HEADS` 환경변수)에 맞추면 됩니다.
+
+> 짝이 맞는지 확인: 한국어 문장의 LM loss가 랜덤(≈9.7)보다 충분히 낮으면 정상.
+> loss가 랜덤보다 높으면 토크나이저-모델 불일치입니다.
+
+### API 스펙
+
 ```
 POST /chat
 Body:     { "message": "안녕하세요" }
@@ -278,6 +280,16 @@ Response: { "response": "..." }
 ```
 
 `web/` 폴더는 `/` 경로에 정적 파일로 마운트되어, 서버 하나로 API와 UI를 함께 제공합니다.
+
+### `app/` 구성
+
+| 파일 | 역할 |
+|---|---|
+| `config.py` | 경로 + 생성 파라미터(temperature/top_k/repetition_penalty) |
+| `core/model.py` | Decoder-only Transformer |
+| `core/tokenizer.py` | BPE 토크나이저 (추론 전용 load/encode/decode) |
+| `core/engine.py` | `InferenceEngine` — 체크포인트 자동 추론 로드 + 생성 |
+| `main.py` | FastAPI `POST /chat` + `web/` 정적 UI 서빙 |
 
 ---
 
@@ -299,21 +311,21 @@ ChatGPT 스타일의 다크테마 채팅 인터페이스입니다.
 
 ---
 
-## 챗봇 답변 예시 (KoGPT2 + KoAlpaca 파인튜닝)
+## 챗봇 답변 예시 (Stage 1 from-scratch)
+
+약 52M 파라미터의 소형 모델이라 완벽하진 않지만, 한국어 문장 구조와 답변 형식을 학습했습니다.
 
 ```
-👤 유저: 오늘 날씨 덥다
-🤖 챗봇: 날씨는 구름이 많은 날씨가 예상됩니다. 특히 새벽에는 흐리고 비가 오는 곳이 많습니다. 이는 고기압의 영향을 받는 북태평양고기압이 우리나라로 확장하면서 만들어진 비구름이기 때문입니다. 따라서 이날은 구름 없이 맑은 날이 많고, 일사에 의해 기온이 오르면서 추워질 것으로 생각됩니다.
+👤 한국의 수도는 어디인가요?
+🤖 서울에서 10월 2013년 11월 ... 지역인 '북대행'을 가리키는 기념일을 의미합니다.
 
-따라서, 기상청에서는 "날씨 예보"를 통해 날씨 예측을 하고 있습니다. 
-※ 답변 출처: http://www.kma1.go.kr/articleView-201612/2106&blogs_story2.asp?docId=847
+👤 날씨가 덥다
+🤖 우리 몸의 눈이나 꽃잎의 색소를 가지고 있습니다. 이러한 현상은 우리가 말할 때
+   발생하는 현상입니다. ...
 
-👤 유저: 핸드폰 추천해줘
-🤖 챗봇: 네, 안녕하세요. 스마트폰으로 영화와 TV를 시청하면서 음악을 감상하는 것은 어떨까요? 이는 하나의 문화 현상 중 하나입니다. 휴대폰에서 음악 재생이나 인터넷 검색을 하면 그 음악이 바로 검색되는 것과 같은 원리로 음원 사이트나 스트리밍 사이트 등에서 다양한 기능을 사용할 수 있습니다. 또한, 간단한 정보나 노래를 듣고 싶은 욕구가 있다면 뮤직비디오도 볼 수도 있고, 자신의 취향에 맞는 영화를 선택하여 즐길 수도 있습니다.
-
-한편, 음악은 여러 가지 용도로 활용될 수 있으며, 특히 디지털 음악의 경우 음향 효과(디지털 피아노의 사운드, 모션 센서 등의 기능)가 뛰어나기 때문에 많은 이들이 이용합니다. 따라서, 집에서 음악과
-
-👤 유저: 핸드폰 기종 추천
-🤖 챗봇: 휴대폰이 보급되면서 다양한 제품들이 출시되고 있습니다. 그 중에서도 TGI(Thin Global Inchange)라는 제품이 가장 인기 있는 폰 중 하나입니다. 이 제품은 듀얼 폴더와 슬라이딩을 지원하며, 슬림형 디자인으로 휴대성과 편의성을 높였습니다. 또한 무선 이어폰과 와이파이(Wi-Fi) 기능을 제공합니다.
-
+👤 안녕?
+🤖 대한민국 국민으로 인정되며, 그 중 하나인 한국의 ... 국가입니다.
 ```
+
+> 더 자연스러운 답변을 원하면 Stage 3(KoGPT2 파인튜닝) 모델을 서빙하도록
+> `MODEL_PATH`를 교체하면 됩니다.

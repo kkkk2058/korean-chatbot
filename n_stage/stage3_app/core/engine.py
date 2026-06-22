@@ -1,8 +1,8 @@
 import torch
 from transformers import GPT2LMHeadModel, PreTrainedTokenizerFast
 
-from app.config import MODEL_PATH, TOKENIZER_PATH
-from stage3_fine_tuning.config import GenerateConfig
+from n_stage.stage3_app.config import MODEL_PATH, TOKENIZER_PATH
+from n_stage.stage3_fine_tuning.config import GenerateConfig
 
 
 class InferenceEngine:

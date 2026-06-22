@@ -21,5 +21,13 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 .json
+
+
 .ptstage1_from_scratch/model/checkpoint.pt
 stage1_from_scratch/model/*.pt
+
+
+my_tokenizer/
+my_tokenizer/tokenizer.json
+tokenizer/
+/tokenizer/tokenizer.json

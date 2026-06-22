@@ -373,7 +373,7 @@ def load_koalpaca_corpus(split="train"):
     return corpus
 
 
-def train_on_koalpaca(vocab_size=8000, split="train", save_path="ko_bpe.json", max_corpus_lines=None):
+def train_on_koalpaca(vocab_size=16000, split="train", save_path="ko_bpe.json", max_corpus_lines=None):
     """KoAlpaca로 BPE 토크나이저를 학습하고 저장"""
     corpus = load_koalpaca_corpus(split=split)
     print(f"코퍼스 수집 완료. 총 문장 수: {len(corpus)}")

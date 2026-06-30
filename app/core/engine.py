@@ -79,6 +79,16 @@ class InferenceEngine:
             for tok in set(x[0].tolist()):
                 logits[0, tok] /= settings.REPETITION_PENALTY
 
+            # no-repeat-ngram: 직전 (n-1)토큰이 과거에 나왔던 위치의 '다음 토큰'을 금지
+            # → 같은 n-gram 반복("안녕하세요! 안녕하세요!") 원천 차단
+            n = settings.NO_REPEAT_NGRAM
+            if n > 0 and x.size(1) >= n:
+                seq = x[0].tolist()
+                prefix = tuple(seq[-(n - 1):])
+                for i in range(len(seq) - n + 1):
+                    if tuple(seq[i:i + n - 1]) == prefix:
+                        logits[0, seq[i + n - 1]] = float("-inf")
+
             logits = logits / settings.TEMPERATURE
             top_k = min(settings.TOP_K, logits.size(-1))
             topk_vals, _ = torch.topk(logits, top_k)

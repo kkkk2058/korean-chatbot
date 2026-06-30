@@ -32,6 +32,7 @@ class Settings:
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.8"))
     TOP_K = int(os.getenv("TOP_K", "30"))
     REPETITION_PENALTY = float(os.getenv("REPETITION_PENALTY", "1.3"))
+    NO_REPEAT_NGRAM = int(os.getenv("NO_REPEAT_NGRAM", "0"))  # 0=끔(Colab과 동일), 루프 재발 시 3으로 켜는 안전장치
 
     # 파인튜닝 때 사용한 프롬프트 형식과 반드시 일치해야 함
     PROMPT_FMT = "질문: {q}\n답변:"

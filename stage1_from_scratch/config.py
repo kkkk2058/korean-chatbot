@@ -32,10 +32,10 @@ DROPOUT      = 0.1
 PRETRAIN_BATCH_SIZE   = 16
 PRETRAIN_GRAD_ACCUM   = 4       # effective batch = 64
 PRETRAIN_LR           = 3e-4
-PRETRAIN_EPOCHS       = 3
+PRETRAIN_EPOCHS       = 15
 
 # 파인튜닝
 FINETUNE_BATCH_SIZE   = 16
 FINETUNE_GRAD_ACCUM   = 4
 FINETUNE_LR           = 1e-4    # 사전학습보다 낮게
-FINETUNE_EPOCHS       = 10
+FINETUNE_EPOCHS       = 5
